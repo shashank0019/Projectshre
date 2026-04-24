@@ -5,7 +5,7 @@ from typing import List, Dict, Any
 from config import Config
 from models import Candidate
 from app.utils.tfidf_resume_parser import extract_text_from_resume, extract_candidate_info, allowed_file
-from app.utils.embedding_utils import generate_embedding, rank_candidates
+from app.utils.embedding_utils import generate_embedding, generate_query_embedding, rank_candidates, compute_similarity
 
 class CandidateService:
     """Service for managing candidates"""
@@ -136,118 +136,71 @@ class CandidateService:
     
     def search_candidates(self, query_text: str, filters: Dict[str, Any] = None) -> List[Dict[str, Any]]:
         """
-        Search candidates using skill matching and experience filtering
+        Search candidates using semantic similarity (embeddings) with experience filtering
+        
+        Uses all-MiniLM-L6-v2 model for semantic matching (60% weight)
+        Combined with experience score (20% weight) and MCQ score (20% weight)
         
         Args:
-            query_text: Search query (skills and experience)
-            filters: Optional filters (skills, minExperience, etc.)
+            query_text: Search query (e.g., "Python developer with 5 years experience")
+            filters: Optional filters {skills: [], minExperience: 5, maxExperience: 10}
             
         Returns:
-            Ranked list of candidates
+            Ranked list of candidates with similarity scores
         """
         try:
-            # Get all candidates
+            # Get all candidates with embeddings
             if self.db is not None:
                 candidates = list(self.db['candidates'].find({}, {'_id': 0}))
             else:
-                candidates = [{k: v for k, v in c.items() if k != 'embedding'} for c in CandidateService._candidates_memory]
+                candidates = [c for c in CandidateService._candidates_memory]
             
             if not candidates:
                 return []
             
-            # Extract search terms from query
-            query_skills = []
+            # Parse filters
             min_experience = 0
+            max_experience = 999
             
-            # Parse query for skills and experience
             if filters:
-                if 'skills' in filters and filters['skills']:
-                    query_skills = filters['skills']
-                
                 min_exp_key = 'minExperience' if 'minExperience' in filters else 'min_experience'
-                if min_exp_key in filters and filters[min_exp_key]:
-                    min_experience = filters[min_exp_key]
+                if min_exp_key in filters and filters[min_exp_key] is not None:
+                    min_experience = int(filters[min_exp_key])
+                
+                max_exp_key = 'maxExperience' if 'maxExperience' in filters else 'max_experience'
+                if max_exp_key in filters and filters[max_exp_key] is not None:
+                    max_experience = int(filters[max_exp_key])
             
-            print(f"\n[SEARCH] Query skills: {query_skills}, Min experience: {min_experience} years")
+            print(f"\n[SEARCH] Using semantic embedding search (all-MiniLM-L6-v2)")
+            print(f"[SEARCH] Query: '{query_text}'")
+            print(f"[SEARCH] Filters - Experience: {min_experience}-{max_experience} years")
             
-            # Score each candidate
-            scored_candidates = []
-            for candidate in candidates:
-                # Get candidate skills and experience
-                candidate_skills = [s.lower() for s in candidate.get('skills', [])]
-                candidate_experience = self._extract_experience_years(candidate.get('experience', ''))
-                
-                # Count exact matching skills
-                matching_skills = 0
-                matched_skill_names = []
-                if query_skills:
-                    for query_skill in query_skills:
-                        for cskill in candidate_skills:
-                            if query_skill.lower() in cskill:
-                                matching_skills += 1
-                                matched_skill_names.append(query_skill)
-                                break
-                
-                # Check experience match
-                experience_match = candidate_experience >= min_experience
-                
-                # Calculate skill score - IMPROVED DIFFERENTIATION
-                max_skills = len(query_skills) if query_skills else 1
-                skill_score = (matching_skills / max_skills) * 0.8 if max_skills > 0 else 0.3
-                
-                # Calculate experience score - IMPROVED DIFFERENTIATION
-                if min_experience == 0:
-                    # Scale 0-10 years to 0.3-1.0
-                    experience_score = 0.3 + (min(candidate_experience, 10) / 10.0) * 0.7
-                elif experience_match:
-                    # Bonus for exceeding minimum - more differentiation
-                    experience_bonus = min((candidate_experience - min_experience) / 2.0, 1.0)
-                    experience_score = 0.5 + experience_bonus
-                else:
-                    experience_score = 0.1
-                
-                # Add skill diversity bonus (more total skills = bonus)
-                skill_diversity_bonus = min(len(candidate_skills) / 15.0, 0.15)
-                
-                # Calculate FINAL score with better differentiation
-                final_score = (skill_score * 0.5 + experience_score * 0.35 + skill_diversity_bonus * 0.15)
-                
-                # Ensure scores range from 0.0 to 1.0
-                final_score = max(0.0, min(1.0, final_score))
-                
-                # Convert to percentage
-                final_percentage = round(final_score * 100, 2)
-                
-                print(f"  [{candidate['name']}] Skills matched: {matching_skills}/{len(query_skills)} | " +
-                      f"Experience: {candidate_experience}y | Score: {final_percentage}% | " +
-                      f"(skill:{skill_score:.2f}, exp:{experience_score:.2f}, div:{skill_diversity_bonus:.2f})")
-                
-                # Only include candidates that match filters
-                if query_skills or min_experience > 0:
-                    if (query_skills and matching_skills > 0) or (min_experience > 0 and experience_match):
-                        candidate['score'] = final_score
-                        candidate['percentage'] = final_percentage
-                        candidate['matched_skills'] = matched_skill_names
-                        scored_candidates.append(candidate)
-                else:
-                    candidate['score'] = final_score
-                    candidate['percentage'] = final_percentage
-                    candidate['matched_skills'] = matched_skill_names
-                    scored_candidates.append(candidate)
+            # Generate query embedding
+            query_embedding = generate_query_embedding(query_text)
             
-            # Sort by score descending
-            scored_candidates.sort(key=lambda x: x['score'], reverse=True)
+            # Rank all candidates by semantic similarity + experience + MCQ
+            ranked_candidates = rank_candidates(query_embedding, candidates)
             
-            # Add rank
-            for idx, candidate in enumerate(scored_candidates, 1):
-                candidate['rank'] = idx
+            # Filter by experience range
+            filtered_results = []
+            for candidate in ranked_candidates:
+                exp = candidate.get('experience', 0)
+                if min_experience <= exp <= max_experience:
+                    # Remove large data before returning
+                    if 'resume_text' in candidate:
+                        del candidate['resume_text']
+                    filtered_results.append(candidate)
             
-            print(f"[SEARCH] Total results: {len(scored_candidates)}\n")
+            print(f"[SEARCH] Found {len(filtered_results)} candidates matching filters")
+            for i, c in enumerate(filtered_results[:5], 1):
+                print(f"  #{i}. {c['name']} - Score: {c.get('percentage', 0):.1f}% | " +
+                      f"Semantic: {c.get('semantic_similarity', 0):.3f} | " +
+                      f"Experience: {c.get('experience', 0)}y")
             
-            return scored_candidates
+            return filtered_results
         
         except Exception as e:
-            print(f"Error searching candidates: {str(e)}")
+            print(f"[ERROR] Error searching candidates: {str(e)}")
             import traceback
             traceback.print_exc()
             return []
@@ -281,9 +234,15 @@ class CandidateService:
         
         return filtered
     
-    def _extract_experience_years(self, experience_str: str) -> int:
-        """Extract years from experience string"""
+    def _extract_experience_years(self, experience_str) -> int:
+        """Extract years from experience string or int"""
         import re
+        # Handle case where experience is already an integer
+        if isinstance(experience_str, int):
+            return experience_str
+        # Handle string input
+        if not isinstance(experience_str, str):
+            return 0
         match = re.search(r'(\d+)', experience_str)
         return int(match.group(1)) if match else 0
     

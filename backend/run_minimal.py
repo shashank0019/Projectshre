@@ -1,36 +1,43 @@
 #!/usr/bin/env python
-"""Minimal Flask app for demo purposes"""
-from flask import Flask, jsonify
-from flask_cors import CORS
+"""Minimal FastAPI app for demo purposes"""
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
 import os
 
 def create_minimal_app():
-    """Create a minimal Flask app"""
-    app = Flask(__name__)
+    """Create a minimal FastAPI app"""
+    app = FastAPI()
     
     # Initialize CORS
-    CORS(app, origins=['*'])
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=['*'],
+        allow_credentials=True,
+        allow_methods=['*'],
+        allow_headers=['*'],
+    )
     
     # Basic health check endpoint
-    @app.route('/api/health', methods=['GET'])
+    @app.get('/api/health')
     def health():
-        return jsonify({'status': 'ok', 'message': 'Backend is running'})
+        return {'status': 'ok', 'message': 'Backend is running'}
     
     # Dummy candidate endpoints
-    @app.route('/api/candidates', methods=['GET'])
+    @app.get('/api/candidates')
     def get_candidates():
-        return jsonify({'candidates': [], 'message': 'Database not configured'})
+        return {'candidates': [], 'message': 'Database not configured'}
     
-    @app.route('/api/search', methods=['POST'])
+    @app.post('/api/search')
     def search_candidates():
-        return jsonify({'results': [], 'message': 'Search functionality not available'})
+        return {'results': [], 'message': 'Search functionality not available'}
     
     return app
 
 if __name__ == '__main__':
     app = create_minimal_app()
-    app.run(
-        debug=True,
+    uvicorn.run(
+        app,
         host='0.0.0.0',
         port=5000
     )

@@ -9,6 +9,9 @@ export interface Candidate {
   matched_skills?: string[];
   mcqScore?: number;
   resumeText?: string;
+  skill_scores?: { [skill: string]: number };  // per-skill relevance % from all-MiniLM-L6-v2
+  semantic_similarity?: number;
+  experience_score?: number;
 }
 
 export interface SearchQuery {

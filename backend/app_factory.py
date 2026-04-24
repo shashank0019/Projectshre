@@ -1,20 +1,27 @@
-from flask import Flask, jsonify
-from flask_cors import CORS
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from config import config
 import os
 
 def create_app(config_name='development'):
     """Application factory"""
-    app = Flask(__name__)
+    app = FastAPI()
     
     # Load config
-    app.config.from_object(config[config_name])
+    cfg = config[config_name]
+    app.config = cfg
     
     # Create upload folder if it doesn't exist
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    os.makedirs(cfg.UPLOAD_FOLDER, exist_ok=True)
     
     # Initialize CORS
-    CORS(app, origins=app.config['CORS_ORIGINS'])
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cfg.CORS_ORIGINS if isinstance(cfg.CORS_ORIGINS, list) else ["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     
     # Initialize database (optional - graceful degradation)
     try:
@@ -23,27 +30,14 @@ def create_app(config_name='development'):
     except ImportError as e:
         print(f"Warning: Database initialization skipped - {e}")
     
-    # Register error handlers
-    @app.errorhandler(400)
-    def bad_request(error):
-        return jsonify({'error': 'Bad request', 'message': str(error)}), 400
-    
-    @app.errorhandler(404)
-    def not_found(error):
-        return jsonify({'error': 'Not found', 'message': str(error)}), 404
-    
-    @app.errorhandler(500)
-    def internal_error(error):
-        return jsonify({'error': 'Internal server error', 'message': str(error)}), 500
-    
     # Register health check
-    @app.route('/api/health', methods=['GET'])
+    @app.get('/api/health')
     def health_check():
-        return jsonify({'status': 'healthy', 'service': 'candidate-search-backend'}), 200
+        return {'status': 'healthy', 'service': 'candidate-search-backend'}
     
-    # Register blueprints
+    # Register routers
     from app.routes.candidate_routes import candidate_bp
-    app.register_blueprint(candidate_bp)
+    app.include_router(candidate_bp, prefix='/api')
     
     return app
 

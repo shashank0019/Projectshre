@@ -53,15 +53,40 @@ import { Candidate } from '../../models/candidate.model';
               <span class="rank-badge">{{ candidate.rank }}</span>
             </div>
             <div class="result-info">
-              <div class="candidate-name">{{ candidate.name }}</div>
-              <div class="result-score" *ngIf="candidate.percentage">
-                ✓ <strong>{{ candidate.percentage }}%</strong>
+              <div class="result-header-row">
+                <div class="candidate-name">{{ candidate.name }}</div>
+                <div class="result-score" *ngIf="candidate.percentage">
+                  ✓ <strong>{{ candidate.percentage }}%</strong> overall
+                </div>
               </div>
-              <div class="result-details" *ngIf="candidate.experience || candidate.matched_skills">
-                <span *ngIf="candidate.experience">📅 {{ candidate.experience }}</span>
-                <span *ngIf="candidate.matched_skills && candidate.matched_skills.length > 0">
-                  🎯 Matched: {{ candidate.matched_skills.join(', ') }}
-                </span>
+              <div class="result-meta" *ngIf="candidate.experience">
+                📅 {{ candidate.experience }} yrs experience
+              </div>
+
+              <!-- Only show skills the user searched for -->
+              <div class="resume-skills" *ngIf="getMatchedSkills(candidate).length > 0">
+                <div class="skills-label">Matched Skills <span class="model-tag">all-MiniLM-L6-v2</span></div>
+                <div class="skill-bars">
+                  <div *ngFor="let skill of getMatchedSkills(candidate)" class="skill-row">
+                    <div class="skill-meta">
+                      <span class="skill-name">{{ skill }}</span>
+                      <span class="skill-pct"
+                            [class.high]="getSkillPct(candidate, skill) >= 60"
+                            [class.mid]="getSkillPct(candidate, skill) >= 30 && getSkillPct(candidate, skill) < 60"
+                            [class.low]="getSkillPct(candidate, skill) < 30">
+                        {{ getSkillPct(candidate, skill) }}%
+                      </span>
+                    </div>
+                    <div class="skill-bar-bg">
+                      <div class="skill-bar-fill"
+                           [style.width.%]="getSkillPct(candidate, skill)"
+                           [class.high]="getSkillPct(candidate, skill) >= 60"
+                           [class.mid]="getSkillPct(candidate, skill) >= 30 && getSkillPct(candidate, skill) < 60"
+                           [class.low]="getSkillPct(candidate, skill) < 30">
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -321,11 +346,11 @@ import { Candidate } from '../../models/candidate.model';
     }
 
     .search-results {
-      background: #fff3cd;
+      background: #fff8e1;
       padding: 20px;
-      border-radius: 8px;
+      border-radius: 10px;
       margin-bottom: 30px;
-      border: 1px solid #ffc107;
+      border: 1px solid #ffe082;
     }
 
     .search-results h3 {
@@ -335,17 +360,19 @@ import { Candidate } from '../../models/candidate.model';
 
     .result-item {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 15px;
       background: white;
-      padding: 15px;
-      border-radius: 6px;
+      padding: 18px;
+      border-radius: 8px;
       border-left: 5px solid #ffc107;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
     }
 
     .result-rank {
       display: flex;
       justify-content: center;
+      padding-top: 2px;
     }
 
     .rank-badge {
@@ -359,31 +386,107 @@ import { Candidate } from '../../models/candidate.model';
       font-weight: bold;
       font-size: 18px;
       border-radius: 50%;
+      flex-shrink: 0;
     }
 
     .result-info {
       flex: 1;
+      min-width: 0;
+    }
+
+    .result-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
     }
 
     .result-score {
       font-size: 13px;
       color: #28a745;
-      margin-top: 5px;
-      font-weight: 600;
+      font-weight: 700;
     }
 
-    .result-details {
+    .result-meta {
       font-size: 12px;
-      color: #666;
-      margin-top: 8px;
-      display: flex;
-      gap: 15px;
-      flex-wrap: wrap;
+      color: #777;
+      margin-top: 4px;
     }
 
-    .result-details span {
-      display: inline-block;
+    .resume-skills {
+      margin-top: 14px;
+      border-top: 1px solid #f0f0f0;
+      padding-top: 12px;
     }
+
+    .skills-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .model-tag {
+      font-size: 10px;
+      font-weight: 500;
+      background: #e8f0fe;
+      color: #3c55a5;
+      padding: 2px 7px;
+      border-radius: 10px;
+    }
+
+    .skill-bars {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 10px 20px;
+    }
+
+    .skill-row {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .skill-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .skill-name {
+      font-size: 12px;
+      font-weight: 500;
+      color: #2c3e50;
+    }
+
+    .skill-pct {
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .skill-pct.high { color: #1e8e3e; }
+    .skill-pct.mid  { color: #c97700; }
+    .skill-pct.low  { color: #1565c0; }
+
+    .skill-bar-bg {
+      width: 100%;
+      height: 5px;
+      background: #e0e0e0;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .skill-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.5s ease;
+    }
+    .skill-bar-fill.high { background: linear-gradient(90deg, #34a853, #1e8e3e); }
+    .skill-bar-fill.mid  { background: linear-gradient(90deg, #fbbc04, #c97700); }
+    .skill-bar-fill.low  { background: linear-gradient(90deg, #4285f4, #1565c0); }
 
     .candidates-section {
       margin-top: 30px;
@@ -428,11 +531,12 @@ export class DashboardComponent implements OnInit {
   isUploading: boolean = false;
   uploadMessage: string = '';
   uploadSuccess: boolean = false;
-  
+
   // Search properties
   searchSkills: string = '';
   searchExperience: number | null = null;
   searchResults: Candidate[] = [];
+  activeSearchSkills: string[] = [];  // skills the user actually searched for
 
   constructor(private candidateService: CandidateService) {}
 
@@ -527,6 +631,10 @@ export class DashboardComponent implements OnInit {
     }).subscribe({
       next: (response) => {
         this.searchResults = response.candidates;
+        // Store the skills actually searched so template can filter
+        this.activeSearchSkills = this.searchSkills
+          ? this.searchSkills.split(',').map((s: string) => s.trim()).filter(s => s)
+          : [];
       },
       error: (_error) => {
         console.error('Error searching candidates:', _error);
@@ -539,5 +647,29 @@ export class DashboardComponent implements OnInit {
     this.searchResults = [];
     this.searchSkills = '';
     this.searchExperience = null;
+    this.activeSearchSkills = [];
+  }
+
+  /** Return per-skill relevance % from all-MiniLM-L6-v2 */
+  getSkillPct(candidate: any, skill: string): number {
+    if (candidate.skill_scores && candidate.skill_scores[skill] !== undefined) {
+      return candidate.skill_scores[skill];
+    }
+    return 0;
+  }
+
+  /**
+   * Return only the candidate's skills that match what was searched.
+   * Matching is case-insensitive. If no skills were searched, return all.
+   */
+  getMatchedSkills(candidate: any): string[] {
+    const allSkills: string[] = candidate.skills || [];
+    if (!this.activeSearchSkills.length) return allSkills;
+    return allSkills.filter(skill =>
+      this.activeSearchSkills.some(searched =>
+        skill.toLowerCase().includes(searched.toLowerCase()) ||
+        searched.toLowerCase().includes(skill.toLowerCase())
+      )
+    );
   }
 }

@@ -33,3 +33,10 @@ uploads/
 # Build
 dist/
 build/
+
+
+frontend/.angular/
+node_modules/
+__pycache__/
+*.pyc
+.env

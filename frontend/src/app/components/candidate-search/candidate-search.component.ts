@@ -53,11 +53,26 @@ import { SearchResponse } from '../../models/candidate.model';
           </div>
 
           <div class="skills-section">
-            <strong>Skills:</strong>
+            <strong>Skills <span class="model-badge">all-MiniLM-L6-v2</span></strong>
             <div class="skills-list">
-              <span *ngFor="let skill of candidate.skills" class="skill-tag">
-                {{ skill }}
-              </span>
+              <div *ngFor="let skill of candidate.skills" class="skill-row">
+                <div class="skill-header-row">
+                  <span class="skill-name">{{ skill }}</span>
+                  <span class="skill-pct" [class.high]="getSkillPct(candidate, skill) >= 60"
+                                          [class.mid]="getSkillPct(candidate, skill) >= 30 && getSkillPct(candidate, skill) < 60"
+                                          [class.low]="getSkillPct(candidate, skill) < 30">
+                    {{ getSkillPct(candidate, skill) }}%
+                  </span>
+                </div>
+                <div class="skill-bar-bg">
+                  <div class="skill-bar-fill"
+                       [style.width.%]="getSkillPct(candidate, skill)"
+                       [class.high]="getSkillPct(candidate, skill) >= 60"
+                       [class.mid]="getSkillPct(candidate, skill) >= 30 && getSkillPct(candidate, skill) < 60"
+                       [class.low]="getSkillPct(candidate, skill) < 30">
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -190,23 +205,72 @@ import { SearchResponse } from '../../models/candidate.model';
 
     .skills-section {
       border-top: 1px solid #ddd;
-      padding-top: 10px;
+      padding-top: 12px;
+    }
+
+    .model-badge {
+      font-size: 10px;
+      font-weight: 500;
+      background: #e8f0fe;
+      color: #3c55a5;
+      padding: 2px 7px;
+      border-radius: 10px;
+      margin-left: 6px;
+      vertical-align: middle;
+      letter-spacing: 0.2px;
     }
 
     .skills-list {
       display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 10px;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 12px;
     }
 
-    .skill-tag {
-      background: #e3f2fd;
-      color: #1976d2;
-      padding: 4px 12px;
-      border-radius: 20px;
-      font-size: 12px;
+    .skill-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
     }
+
+    .skill-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .skill-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: #2c3e50;
+    }
+
+    .skill-pct {
+      font-size: 12px;
+      font-weight: 700;
+      min-width: 38px;
+      text-align: right;
+    }
+    .skill-pct.high { color: #1e8e3e; }
+    .skill-pct.mid  { color: #c97700; }
+    .skill-pct.low  { color: #1565c0; }
+
+    .skill-bar-bg {
+      width: 100%;
+      height: 6px;
+      background: #e0e0e0;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .skill-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.5s ease;
+    }
+    .skill-bar-fill.high { background: linear-gradient(90deg, #34a853, #1e8e3e); }
+    .skill-bar-fill.mid  { background: linear-gradient(90deg, #fbbc04, #c97700); }
+    .skill-bar-fill.low  { background: linear-gradient(90deg, #4285f4, #1565c0); }
   `]
 })
 export class CandidateSearchComponent implements OnInit {
@@ -240,5 +304,13 @@ export class CandidateSearchComponent implements OnInit {
         this.isLoading = false;
       }
     });
+  }
+
+  /** Return the per-skill relevance % from all-MiniLM-L6-v2, or 0 if not available */
+  getSkillPct(candidate: any, skill: string): number {
+    if (candidate.skill_scores && candidate.skill_scores[skill] !== undefined) {
+      return candidate.skill_scores[skill];
+    }
+    return 0;
   }
 }
